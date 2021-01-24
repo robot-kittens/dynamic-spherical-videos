@@ -36,3 +36,21 @@
     transform: rotate(360deg);
   }
 }
+
+.editor video {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.editor {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.controls {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 90;
+}
