@@ -1,106 +1,181 @@
 
+
 <!DOCTYPE html>
 <html>
 <head>
-	<title>jsmpeg Demo - Big Buck Bunny</title>
-	<style type="text/css">
-		html,body {
-			background-color: red;
-			color: #555;
-			font-family: helvetica, arial, sans-serif;
-			margin: 0;
-			padding: 0;
-			font-size: 12pt;
+	<title>Hi World</title>
+	<style>
+		html, body {
+			background: blue;
 		}
-		
-		#container {
-			position: absolute;
-			left: 0;
-			right: 0;
-			top: 30px;
-			margin: auto;
-			width: 640px;
+		#mask {
+			position:absolute;
+			top:360px;
+			left:0;
+			display: none;
 		}
-		a {
-			color: #777;
-			text-decoration: none;
+
+		#output {
+		    overflow:hidden;
+			/*width:640px;*/
+			/*height:360px;*/
+			position:absolute;
+			top:0;
+			left:0;
+
+			z-index:2;
 		}
-		a:hover {
-			color: #ccc;
+
+		#testmask {
+			position:absolute;
+			top:0;
+			left:0;
+
+		    transform-origin: 0 0;
+			-webkit-transform-origin: 0 0;
+			-moz-transform-origin: 0 0;
+			-o-transform-origin: 0 0;
+
+			-webkit-font-smoothing: none;
+
+			z-index: 1;
+			display: none;
+		}
+
+		.container {
+			/*overflow:hidden;*/
+			/*width:640px;
+			height:360px;*/
+			position:relative;
+			top:0;
+			left:0;
 		}
 	</style>
-	
 </head>
 <body>
+	<h1>Hi World</h1>
   <div id="root"></div>
-	<div id="container">
-		<div style='position:absolute;left:0px;top:0px;'><canvas id="screenCanvas" width="640" height="360"></canvas></div>
-		<div style='position:absolute;left:0px;top:0px;'><canvas id="videoCanvas0" width="640" height="360"></canvas></div>
-		<div style='display:none;'><canvas id="videoCanvas" width="640" height="360"></canvas></div>
-		<div style='display:none;'><canvas id="videoCanvas2" width="640" height="360"></canvas></div>
-		<div><canvas id="downcanvas" width="640" height="360"></canvas></div>
-
+	<div class="container">
+		<canvas id="output" width="640" height="360"></canvas>
+		<img id="testmask" src="test.jpg" />
 	</div>
-	<script type="text/javascript" src="jsmpg.js"></script>
-	<script type="text/javascript" src="track.js"></script>
-	<script type="text/javascript" src="DeformerObject.js"></script>
-	<script type="text/javascript" src="Deformer.js"></script>
-	<script type="text/javascript" src="numeric.js"></script>
-	<script type="text/javascript" src="temp.js"></script>
-	<script type="text/javascript">
-		var cf = 0;
 
-		function loadTrackingData(track) {
-			var trackingData = track;	
-			var o;
+	<!--https://stackoverflow.com/questions/29307675/use-alpha-channeled-video-to-mask-html-content
+	ffmpeg -i 'BankGiroLoterij - SPOTTA PVM HD 2.mov' -keyint_min 0 -f mpeg1video -vf "crop=iw-mod(iw\,2):ih-mod(ih\,2)" -b:v 700000  loterij2.mpg -->
+	
+	<!-- // <script type="text/javascript" src="pixi.js"></script> -->
+	<!-- // <script type="text/javascript" src="glfx.js"></script> -->
+	<script type="text/javascript" src="numeric.js"></script>
+	<!-- // <script type="text/javascript" src="DOMDeform.js"></script> -->
+	<script type="text/javascript" src="WebGLDeform.js"></script>
+	<script type="text/javascript" src="track.js"></script>
+	<script type="text/javascript" src="Deformer.js"></script>
+	<script type="text/javascript" src="jsmpg-modified.js"></script>
+	<script type="text/javascript" src="alphavideo.js"></script>
+	<script type="text/javascript">
+		var video = new alphavideo(
+			new jsmpeg('out.mpg',{canvas:document.querySelector("#output")}), 
+			new jsmpeg("outmask.mpg"),
+			{
+				onloaded: init,
+				onbeforeupdate: onBeforeUpdate,
+				onafterupdate: onAfterUpdate
+			}
+		),
+		masked = document.querySelector("#testmask"),
+		deformer = false,
+		frame = -1;
+
+		// var glTest = new WebGLDeform(document.querySelector("#output"));
+
+		function init()
+		{
+
+			var gl = video.output.gl;
+
+		    gl.enable(gl.BLEND);
+			gl.blendEquation(gl.FUNC_ADD);
+			gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
 			
-			for (var i in trackingData) {
-				for (var i2 in trackingData[i]) {
-					o = trackingData[i][i2];
-					//console.log(o);
-					//trace(i);
-					//trace(i2);
-					deformer.addFrame(i, i2, o[1], o[2], o[3], o[4]);
+			deformer = new Deformer();
+			// DOM based deformation
+			// deformer.onPlaceObjectCallback = DOMDeformObject;
+			// deformer.addObject("bus", domTest);
+			
+			deformer.onPlaceObjectCallback = WebGLDeformObject;
+			deformer.addObject("bus", new WebGLDeform(video.output.canvas));
+
+			loadTrackingData(track);
+
+
+			video.output.play();
+		}
+
+		function onRenderMask(gl)
+		{
+			var uint8YMask = new Uint8Array(video.mask.currentY.buffer);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, video.output.codedWidth, video.output.height, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, uint8YMask);
+		}
+
+		function WebGLDeformObject(object,lt,rt,rb,lb)
+		{
+			var object = deformer.objects["bus"].mc;
+			if( !object ) return;
+			object.blurX = 2;
+			object.blurY = 2;
+			// object.blurY = 0.02;
+			// upscale to compensate blur
+			// var margin = 10;
+			// lt.x -= margin;
+			// lt.y -= margin;
+			// rt.x += margin;
+			// rt.y -= margin;
+			// rb.x -= margin;
+			// rb.y += margin;
+			// lb.x += margin;
+			// lb.y += margin;
+
+			object.update([lt,rt,rb,lb]);
+		}
+
+		function DOMDeformObject(object,lt,rt,rb,lb)
+		{
+			// var object = deformer.objects["bus"].mc;
+			if( !object ) return;
+			object.update([lt.x,lt.y],[rt.x,rt.y],[rb.x,rb.y],[lb.x,lb.y]);	
+		}
+
+		function loadTrackingData(track)
+		{
+			var trackingData = track,
+				points,
+				i,
+				j;
+			
+			for (i in trackingData) {
+				for (j in trackingData[i]) {
+					points = trackingData[i][j];
+					deformer.addFrame(i, j, points[1], points[2], points[3], points[4]);
 				}	
 			}		
 		}
 
-		var deformer = new Deformer(640,360,downcanvas);
-		loadTrackingData(track);
-
-		var img = new Image();
-		img.src = 'foto.jpg';
-		img.onload = function() {
-			deformer.addObject("bus",img,"down");
-		};	
-
-		
-
-
-
-
-
-		function donextframe(frame) {
-			if (frame !=  1) {
-			//setTimeout(nextmask,500);
-				nextmask(frame);
-			}
-			//console.log(frame);
-			//setTimeout(nextmask,500);
+		function onBeforeUpdate()
+		{
+			frame++;
+			var gl = video.output.gl;
+			// gl.clearColor(0,0,0,0);
+	    	// gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+	    	if(deformer) deformer.updateFrame(frame);
 		}
 
-		function nextmask(frame) {
-			//deformer.updateFrame(frame);
-			player2.nextFrame();	
+		function onAfterUpdate()
+		{
+			// if(deformer) deformer.updateFrame(frame);
+			// if(deformer) deformer.updateFrame(frame);
 		}
-		var canvas0 = document.getElementById('videoCanvas0');
-		var canvasContext = this.canvas0.getContext('2d');
 
-		var canvas = document.getElementById('videoCanvas');
-		var canvas2 = document.getElementById('videoCanvas2');
-		var player = new jsmpeg('out.mpg', {canvas:canvas, autoplay:true, loop: false,callback:donextframe});
-		var player2 = new jsmpeg('outmask.mpg', {canvas:canvas2, autoplay:false, loop: false,mask:player,maskedtarget:canvasContext});
-		console.log(track);
 	</script>
 </body>
 </html>

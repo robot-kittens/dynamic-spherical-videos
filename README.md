@@ -19,5 +19,8 @@ Holds various tools for creating 360 video content.
 For a quick overview of the current state and next steps we have the following checklist;
 
  - [x] Create a project that can be exported to Mobile devices.
- - [ ] Implement a 360 video within the project
- - [ ] Implement debugging tools to allow for camera movements
+ - [x] Implement a 360 video within the project
+ - [x] Implement debugging tools to allow for camera movements
+ - [x] Realtime 360 video manipulation
+ - [x] Track a regular video 
+ - [ ] Apply lens deformations for 2D to Equirectangular

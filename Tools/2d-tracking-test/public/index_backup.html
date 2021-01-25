@@ -1,0 +1,355 @@
+
+
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Hi World</title>
+	<style>
+		html, body {
+			background: blue;
+		}
+		#mask {
+			position:absolute;
+			top:360px;
+			left:0;
+		}
+
+		#output {
+		    position: absolute;
+		    top: 0;
+		    left: 0;
+		    z-index:2;
+		}
+
+		#testmask {
+		    position: absolute;
+		    top: 140px;
+		    left: 130px;
+		    z-index:1;
+		}
+	</style>
+</head>
+<body>
+	<h1>Hi World</h1>
+
+	<canvas id="output" width="640" height="360"></canvas>
+	<img id="testmask" src="https://s-media-cache-ak0.pinimg.com/236x/8c/3e/3b/8c3e3b79d64f6fdbe250a5e071b258af.jpg" />
+	<!-- Never draws -->
+	<canvas id="mask" width="640" height="360"></canvas>
+
+	https://stackoverflow.com/questions/29307675/use-alpha-channeled-video-to-mask-html-content
+ffmpeg -i 'BankGiroLoterij - SPOTTA PVM HD 2.mov' -keyint_min 0 -f mpeg1video -vf "crop=iw-mod(iw\,2):ih-mod(ih\,2)" -b:v 700000  loterij2.mpg
+	<script type="text/javascript" src="track.js"></script>
+	<script type="text/javascript" src="Deformer.js"></script>
+	<script type="text/javascript" src="jsmpg-modified.js"></script>
+	<script type="text/javascript" src="alphavideo.js"></script>
+	<script type="text/javascript">
+		var video = new alphavideo(
+			new jsmpeg('out.mpg',{canvas:document.querySelector("#output")}), 
+			new jsmpeg("outmask.mpg",{canvas:document.querySelector("#mask")})
+		);
+
+		var deformer = new Deformer(onDeformUpdate);
+		loadTrackingData(track);
+		/*var canvasOutput = document.querySelector("#output"),
+			canvasMask 	= document.querySelector("#mask"),
+			loaded 		 	= 0,
+			total 			= 2;
+
+			output = new jsmpeg('out.mpg', {
+				canvas: canvasOutput, 
+				autoplay: false, 
+				loop: false,
+				noDraw: true,
+				onload: onLoaded,
+				onnextframe:onUpdate,
+				onfinished: onFinished
+			}),
+			mask = new jsmpeg('outmask.mpg',{
+				canvas: canvasMask,
+				autoplay: false,
+				loop: false,
+				noDraw: true,
+				onload: onLoaded,
+				onfinished: onFinished
+			}),
+
+			maskProgram = false;
+			maskYTexture = false,	
+			maskCrTexture = false,	
+			maskCbTexture = false,
+
+			deformer = false;	
+
+		function onLoaded()
+		{
+			loaded++;
+			if(loaded < total) return;
+
+			init();
+		}
+
+		function init() 
+		{
+			console.log("loaded.");
+			
+			deformer = new Deformer(onDeformUpdate);
+			loadTrackingData(track);
+
+			if(output.gl) initWebGL();
+			
+			output.play();
+		}
+
+		function loadTrackingData(track)
+		{
+			var trackingData = track,
+				points,
+				i,
+				j;
+			
+			for (i in trackingData) {
+				for (j in trackingData[i]) {
+					points = trackingData[i][j];
+					deformer.addFrame(i, j, points[1], points[2], points[3], points[4]);
+				}	
+			}		
+		}
+
+		function initWebGL()
+		{
+			var gl = output.gl;
+			gl.enable(gl.BLEND);
+			gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_SUBTRACT);
+			gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE);
+
+			// Setup shader program for masking.
+			initMaskProgram();
+
+			// Setup shader program for the deformer image
+			initDeformProgram();
+		}
+
+
+
+		function initMaskProgram()
+		{
+			var gl = output.gl,
+				SHADER_FRAG_COLOR = [
+					'precision mediump float;',
+					'uniform sampler2D YTexture;',
+					'uniform sampler2D CBTexture;',
+					'uniform sampler2D CRTexture;',
+					'varying vec2 texCoord;',
+				
+					'void main() {',
+						'float y = texture2D(YTexture, texCoord).r;',
+						'float cr = texture2D(CBTexture, texCoord).r - 0.5;',
+						'float cb = texture2D(CRTexture, texCoord).r - 0.5;',
+						'float r = y + 1.4 * cr;',
+						'float g = y + -0.343 * cb - 0.711 * cr;',
+						'float b = y + 1.765 * cb;',
+
+						'float alpha = 0.90 - b;', // 0.9 to compensate
+						
+						'gl_FragColor = vec4(',
+							'r,',
+							'g,',
+							'b,',
+							'alpha',
+						');',
+					'}'
+				].join('\n'),
+				SHADER_IDENTITY = [
+					'attribute vec2 vertex;',
+					'varying vec2 texCoord;',
+					
+					'void main() {',
+						'texCoord = vertex;',
+						'gl_Position = vec4((vertex * 2.0 - 1.0) * vec2(1, -1), 0.0, 1.0);',
+					'}'
+				].join('\n');
+
+			// Added masking shader.
+			maskProgram = gl.createProgram();
+			gl.attachShader(maskProgram, output.compileShader(gl.VERTEX_SHADER, SHADER_IDENTITY));
+			gl.attachShader(maskProgram, output.compileShader(gl.FRAGMENT_SHADER, SHADER_FRAG_COLOR));
+			gl.linkProgram(maskProgram);
+			gl.useProgram(maskProgram);
+
+			vertexAttr = gl.getAttribLocation(maskProgram, 'vertex');
+			gl.enableVertexAttribArray(vertexAttr);
+			gl.vertexAttribPointer(vertexAttr, 2, gl.FLOAT, false, 0, 0);
+
+			// Register textures
+			maskYTexture = output.createTexture(0, 'YTexture',maskProgram);
+			maskCbTexture = output.createTexture(1, 'CBTexture',maskProgram);
+			maskCrTexture = output.createTexture(2, 'CRTexture',maskProgram);
+		}
+
+		function initDeformProgram()
+		{
+			var gl = output.gl;
+
+			// Vertex shader:
+		    var vertShaderSource = [
+		        'attribute vec2 aVertCoord;',
+		        'uniform mat4 uTransformMatrix;',
+		        'varying vec2 vTextureCoord;',
+		        'void main(void) {',
+		        '    vTextureCoord = aVertCoord;',
+		        '    gl_Position = uTransformMatrix * vec4(aVertCoord, 0.0, 1.0);',
+		        '}'
+		    ].join('\n');
+
+		    var vertexShader = gl.createShader(gl.VERTEX_SHADER);
+		    gl.shaderSource(vertexShader, vertShaderSource);
+		    gl.compileShader(vertexShader);
+
+		    if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+		        addError('Failed to compile vertex shader:' +
+		              gl.getShaderInfoLog(vertexShader));
+		    }
+		       
+		    // Fragment shader:
+		    var fragShaderSource = [
+		        'precision mediump float;',
+		        'varying vec2 vTextureCoord;',
+		        'uniform sampler2D uSampler;',
+		        'void main(void)  {',
+		        '    gl_FragColor = texture2D(uSampler, vTextureCoord);',
+		        '}'
+		    ].join('\n');
+
+		    var fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+		    gl.shaderSource(fragmentShader, fragShaderSource);
+		    gl.compileShader(fragmentShader);
+
+		    if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
+		        addError('Failed to compile fragment shader:' +
+		              gl.getShaderInfoLog(fragmentShader));
+		    }
+		    
+		    // Compile the program
+		    rv.shaderProgram = gl.createProgram();
+		    gl.attachShader(rv.shaderProgram, vertexShader);
+		    gl.attachShader(rv.shaderProgram, fragmentShader);
+		    gl.linkProgram(rv.shaderProgram);
+
+		    if (!gl.getProgramParameter(rv.shaderProgram, gl.LINK_STATUS)) {
+		        addError('Shader linking failed.');
+		    }
+		        
+		    // Create a buffer to hold the vertices
+		    rv.vertexBuffer = gl.createBuffer();
+
+		    // Find and set up the uniforms and attributes        
+		    gl.useProgram(rv.shaderProgram);
+		    rv.vertAttrib = gl.getAttribLocation(rv.shaderProgram, 'aVertCoord');
+		        
+		    rv.transMatUniform = gl.getUniformLocation(rv.shaderProgram, 'uTransformMatrix');
+		    rv.samplerUniform = gl.getUniformLocation(rv.shaderProgram, 'uSampler');
+		        
+		    // Create a texture to use for the screen image
+		    rv.screenTexture = gl.createTexture();
+		}
+
+		function renderMask( y, cr, cb )
+		{
+			var gl = output.gl;
+	
+			gl.useProgram(maskProgram);
+			
+			var uint8Y = new Uint8Array(y.buffer),
+				uint8Cr = new Uint8Array(cr.buffer),
+				uint8Cb = new Uint8Array(cb.buffer);
+
+			gl.activeTexture(gl.TEXTURE0);
+			gl.bindTexture(gl.TEXTURE_2D, maskYTexture);
+
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, output.codedWidth, output.height, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, uint8Y);
+			
+			gl.activeTexture(gl.TEXTURE1);
+			gl.bindTexture(gl.TEXTURE_2D, maskCbTexture);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, output.halfWidth, output.height/2, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, uint8Cr);
+			
+			gl.activeTexture(gl.TEXTURE2);
+			gl.bindTexture(gl.TEXTURE_2D, maskCrTexture);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, output.halfWidth, output.height/2, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, uint8Cb);
+
+			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+			gl.useProgram(output.program);
+		}
+
+		function onFinished( jsmpgInstance )
+		{
+			jsmpgInstance.currentFrameNum = 1;
+		}
+
+		function onUpdate()
+		{
+			( output.gl ) ? onUpdate3D() : onUpdate2D();
+			if(deformer) deformer.updateFrame(output.currentFrameNum);
+		}
+
+		function onDeformUpdate(object,lt,rt,rb,lb)
+		{
+			
+		}
+
+		function onUpdate3D()
+		{
+			if(loaded < total) return;
+
+			if( mask.currentFrameNum > 1 ) mask.nextFrame();
+
+			renderMask( mask.currentY, mask.currentCr, mask.currentCb );
+
+			output.noDraw = false;
+			output.renderFrameGL();
+			output.noDraw = true;
+		}
+
+		function onUpdate2D() 
+		{
+			if(loaded < total) return;	
+			if( mask.currentFrameNum > 1 ) mask.nextFrame();
+
+			// Using Uint32 to shift bytes increases overall 
+			// performance as opposed to directly manipulating the values
+			var maskCtx = canvasMask.getContext('2d'),
+				outputCtx = canvasOutput.getContext('2d'),
+				canvasHeight = outputCtx.canvas.height,
+				canvasWidth = outputCtx.canvas.width,
+				maskData = mask.currentRGBA,
+				maskData32 = new Uint32Array(maskData.data.buffer),
+				outputData = output.currentRGBA,
+				outputData32 = new Uint32Array(outputData.data.buffer),
+				r = 0,
+				g = 0,
+				b = 0,
+				a = 0;
+
+				for( var y=0; y < canvasHeight; y++) {
+					for( var x=0; x < canvasWidth; x++) {
+						b = (outputData32[y*canvasWidth+x] >> 16) & 0xff; // Extract blue channel value
+						g = (outputData32[y*canvasWidth+x] >> 8) & 0xff; // Extract green channel value
+						r = (outputData32[y*canvasWidth+x] >> 0) & 0xff; // Extract red channel value
+
+						a = (maskData32[y*canvasWidth+x] >> 16) & 0xff; // Extract blue channel value
+
+						outputData32[y*canvasWidth+x] =
+							(a << 24)		| // Alpha
+							(b << 16) 		| // Blue
+							(g << 8) 		| // Green
+							r 				  // Red
+					}
+				}
+
+				outputData.data.set(outputData32.buffer);
+				outputCtx.putImageData(outputData,0,0,0,0,canvasWidth,canvasHeight);
+		}*/
+	</script>
+</body>
+</html>

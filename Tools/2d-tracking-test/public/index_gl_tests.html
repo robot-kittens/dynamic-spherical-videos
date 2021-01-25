@@ -1,0 +1,289 @@
+
+
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Hi World</title>
+	<style>
+		html, body {
+			background: blue;
+		}
+		#mask {
+			/*display: none;*/
+			position:absolute;
+			top:360px;
+			left:0;
+		}
+
+		#output {
+		    position: absolute;
+		    top: 0;
+		    left: 0;
+		    z-index:1;
+		}
+
+		#testmask {
+		    position: absolute;
+		    top: 140px;
+		    left: 130px;
+		}
+	</style>
+</head>
+<body>
+	<h1>Hi World</h1>
+
+	<canvas id="output" width="640" height="360"></canvas>
+	<img id="testmask" src="https://s-media-cache-ak0.pinimg.com/236x/8c/3e/3b/8c3e3b79d64f6fdbe250a5e071b258af.jpg" />
+	<!-- Never draws -->
+	<canvas id="mask" width="640" height="360"></canvas>
+
+	https://stackoverflow.com/questions/29307675/use-alpha-channeled-video-to-mask-html-content
+ffmpeg -i 'BankGiroLoterij - SPOTTA PVM HD 2.mov' -keyint_min 0 -f mpeg1video -vf "crop=iw-mod(iw\,2):ih-mod(ih\,2)" -b:v 700000  loterij2.mpg
+	<script type="text/javascript" src="jsmpg-original.js"></script>
+	<script type="text/javascript">
+		var canvasOutput = document.querySelector("#output"),
+			canvasMask 	= document.querySelector("#mask"),
+			loaded 		 	= 0,
+			total 			= 2;
+
+			output = new jsmpeg('out.mpg', {
+				canvas: canvasOutput, 
+				autoplay: false, 
+				loop: false,
+				noDraw: true,
+				onload: onLoaded,
+				onnextframe:onUpdate3D,
+				onfinished: onFinished
+			}),
+			mask = new jsmpeg('outmask.mpg',{
+				canvas: canvasMask,
+				autoplay: false,
+				loop: false,
+				noDraw: true,
+				onload: onLoaded,
+				onfinished: onFinished
+			});	
+
+		function onLoaded()
+		{
+			loaded++;
+			if(loaded < total) return;
+
+			startPlayback();
+		}
+
+		function startPlayback() 
+		{
+			console.log("loaded.");
+
+			
+			output.play();
+		}
+
+		function onFinished( jsmpgInstance )
+		{
+			jsmpgInstance.currentFrame = 1;
+		}
+
+		function onUpdate3D()
+		{
+			if(loaded < total) return;
+
+			// console.log("update3d");
+			// console.log( mask.currentY );
+
+			// output.currentY = mask.currentY;
+			// output.currentCr = mask.currentCr;
+			// output.currentCb = mask.currentCb;
+
+			// output.renderFrameGL();	
+			// output.gl.colorMask(0,1,0,0);
+			mask.nextFrame();
+
+			// output.pause();
+
+			// var uint8Y = new Uint8Array(mask.currentY.buffer),
+			// 	uint8Cr = new Uint8Array(mask.currentCr.buffer),
+			// 	uint8Cb = new Uint8Array(mask.currentCb.buffer);
+
+
+			// output.gl.activeTexture(output.gl.TEXTURE3);
+			// output.gl.bindTexture(output.gl.TEXTURE_2D, output.YTexture2);
+			// output.gl.texImage2D(output.gl.TEXTURE_2D, 0, output.gl.LUMINANCE, output.codedWidth, output.height, 0, output.gl.LUMINANCE, output.gl.UNSIGNED_BYTE, uint8Y);
+			
+			// gl.activeTexture(gl.TEXTURE4);
+			// gl.bindTexture(gl.TEXTURE_2D, this.CBTexture);
+			// gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, this.halfWidth, this.height/2, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, uint8Cr);
+			
+			// gl.activeTexture(gl.TEXTURE5);
+			// gl.bindTexture(gl.TEXTURE_2D, this.CRTexture);
+			// gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, this.halfWidth, this.height/2, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, uint8Cb);
+			
+			// output.gl.drawArrays(output.gl.TRIANGLE_STRIP, 0, 4);
+			// output.gl.clear();
+var gl = output.gl;
+			
+
+			// gl.clearColor(0.0,0.0,0.0,0.0);
+			// gl.clear(gl.COLOR_BUFFER_BIT);
+
+	        gl.useProgram(output.maskProgram);
+
+
+			// gl.colorMask(true, false, true, true); 	
+
+			var uint8Y = new Uint8Array(mask.currentY.buffer),
+				uint8Cr = new Uint8Array(mask.currentCr.buffer),
+				uint8Cb = new Uint8Array(mask.currentCb.buffer);
+
+			
+
+			gl.activeTexture(gl.TEXTURE0);
+			gl.bindTexture(gl.TEXTURE_2D, output.YTexture2);
+
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, output.codedWidth, output.height, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, uint8Y);
+			
+			gl.activeTexture(gl.TEXTURE1);
+			gl.bindTexture(gl.TEXTURE_2D, output.CBTexture2);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, output.halfWidth, output.height/2, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, uint8Cr);
+			
+			gl.activeTexture(gl.TEXTURE2);
+			gl.bindTexture(gl.TEXTURE_2D, output.CRTexture2);
+			gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, output.halfWidth, output.height/2, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, uint8Cb);
+			
+			// output.gl.colorMask(true,true,true,true);	
+			// output.gl.colorMask(true,false,true,true);
+
+
+			// Disable rendering to the color buffer...
+			// gl.colorMask(true, true, true, true); 
+			
+
+
+
+	        // gl.colorMask(true, false, true, true); 
+	        // gl.colorMask(true, true, true, false); 
+	        // Disable z buffer updating...
+	        // gl.depthMask(false);
+
+// 
+			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+			gl.useProgram(output.program);
+
+			// gl.colorMask(true, true, true, true); 
+			// gl.enable( gl.BLEND );
+			// gl.blendFunc(gl.ONE, gl.ZERO);
+			output.noDraw = false;
+			output.renderFrameGL();
+			output.noDraw = true;
+
+			gl.enable(gl.BLEND);
+			gl.blendEquation(gl.FUNC_SUBTRACT);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+			// gl.disable(gl.BLEND);
+
+			// gl.blendFunc(gl.ONE_MINUS_DST_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			// gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_SUBTRACT);
+			// gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ONE, gl.ZERO);
+			// gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE);
+			// gl.disable(gl.BLEND);
+			// gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ONE, gl.ONE);
+
+		    // gl.blendFuncSeparate(gl.ONE, gl.ZERO, gl.ZERO, gl.ONE);
+
+		    // output.renderFrameGL();
+
+
+			// Disable rendering to the color buffer...
+	        // gl.colorMask(true, true, true, true); 
+
+	        // output.renderFrameGL();
+	        // Disable z buffer updating...
+	        // gl.depthMask(true);
+
+
+			// gl.clear( gl.COLOR_BUFFER_BIT );
+			// output.gl.colorMask(true,true,true,true);
+
+			// gl.enable( gl.BLEND );
+			// gl.blendEquation( gl.FUNC_SUBTRACT );
+			// gl.blendFunc(gl.ONE,gl.ONE);
+			// gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+
+			// gl.disable( gl.BLEND );
+
+
+			//output.gl.colorMask(true,true,true,true);
+
+			// output.gl.colorMask(true,true,true,true);
+			// gl.enable();
+			
+			// gl.blendEquation( gl.FUNC_ADD );
+			// gl.blendFunc(gl.ONE, gl.ONE);
+
+			// gl.disable();			
+			// output.gl.colorMask(true,true,true,true);
+
+			// output.renderFrameGL();
+
+			// output.renderFrameGL();
+
+			// gl.enable();
+			// gl.blendEquation( gl.FUNC_ADD );
+			// gl.enable( gl.BLEND );
+			// gl.blendEquation( gl.FUNC_REVERSE_SUBTRACT );
+			// gl.blendFunc( gl.ONE, gl.ONE );
+			
+
+			// output.renderFrameGL();
+
+			// output.gl.colorMask(true,true,true,true);
+
+			// gl.blendEquation( gl.FUNC_ADD );
+			// gl.blendFunc( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA );
+			// output.gl.colorMask(true,true,true,true);
+		}
+
+		function onUpdate2D() 
+		{
+			if(loaded < total) return;	
+			if( mask.currentFrame > 1 ) mask.nextFrame();
+
+			// Using Uint32 to shift bytes increases overall 
+			// performance as opposed to directly manipulating the values
+			var maskCtx = canvasMask.getContext('2d'),
+				outputCtx = canvasOutput.getContext('2d'),
+				canvasHeight = outputCtx.canvas.height,
+				canvasWidth = outputCtx.canvas.width,
+				maskData = mask.currentRGBA,
+				maskData32 = new Uint32Array(maskData.data.buffer),
+				outputData = output.currentRGBA,
+				outputData32 = new Uint32Array(outputData.data.buffer),
+				r = 0,
+				g = 0,
+				b = 0,
+				a = 0;
+
+				for( var y=0; y < canvasHeight; y++) {
+					for( var x=0; x < canvasWidth; x++) {
+						b = (outputData32[y*canvasWidth+x] >> 16) & 0xff; // Extract blue channel value
+						g = (outputData32[y*canvasWidth+x] >> 8) & 0xff; // Extract green channel value
+						r = (outputData32[y*canvasWidth+x] >> 0) & 0xff; // Extract red channel value
+
+						a = (maskData32[y*canvasWidth+x] >> 16) & 0xff; // Extract blue channel value
+
+						outputData32[y*canvasWidth+x] =
+							(a << 24)		| // Alpha
+							(b << 16) 		| // Blue
+							(g << 8) 		| // Green
+							r 				  // Red
+					}
+				}
+
+				outputData.data.set(outputData32.buffer);
+				outputCtx.putImageData(outputData,0,0,0,0,canvasWidth,canvasHeight);
+		}
+	</script>
+</body>
+</html>
