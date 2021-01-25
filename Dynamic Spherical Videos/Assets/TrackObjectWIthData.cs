@@ -5,10 +5,13 @@ using UnityEngine;
 public class TrackObjectWIthData : MonoBehaviour
 {
     public UnityEngine.Video.VideoPlayer player;
+    public TrackingData trackingData;
+
     // Start is called before the first frame update
     void Start()
     {
         player = this.transform.parent.GetComponentInChildren<UnityEngine.Video.VideoPlayer>();
+        trackingData = new TrackingData();
 
     }
 
@@ -18,6 +21,19 @@ public class TrackObjectWIthData : MonoBehaviour
         if(player)
         {
             Debug.Log("Got frame"+ player.frame);
+
+            List<float[]> frame = trackingData.data[player.frame.ToString()];
+            if (frame != null)
+            {
+                float[] cornerPinTopLeft = trackingData.data[player.frame.ToString()][0];
+                float cornerPinTopLeftX = cornerPinTopLeft[0];
+                float cornerPinTopLeftY = cornerPinTopLeft[1];
+
+                RectTransform rect = GetComponent<RectTransform>();
+                rect.anchoredPosition = new Vector2(cornerPinTopLeftX, -cornerPinTopLeftY);
+            }
+
+
         }
     }
 }
