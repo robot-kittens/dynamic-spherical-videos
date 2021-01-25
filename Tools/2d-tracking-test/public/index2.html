@@ -1,0 +1,57 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+	<title>jsmpeg Demo - Big Buck Bunny</title>
+	<style type="text/css">
+		html,body {
+			background-color: red;
+			color: #555;
+			font-family: helvetica, arial, sans-serif;
+			margin: 0;
+			padding: 0;
+			font-size: 12pt;
+		}
+		
+		#container {
+			position: absolute;
+			left: 0;
+			right: 0;
+			top: 30px;
+			margin: auto;
+			width: 640px;
+		}
+		a {
+			color: #777;
+			text-decoration: none;
+		}
+		a:hover {
+			color: #ccc;
+		}
+	</style>
+	
+</head>
+<body>
+	<canvas id="screenCanvas" width="640" height="500"></canvas>
+<script type="text/javascript" src="numeric.js"></script>
+<script type="text/javascript" src="temp.js"></script>
+<script>
+var point1 = { x: 150, y: 100 };
+var point2 = { x: 300, y: 100 };
+var point3 = { x: 100, y: 400 };
+var point4 = { x: 300, y: 400 };
+
+setInterval(doIt,100);
+
+function doIt() {
+
+	point1.x = point1.x - 1;
+	setPoints(point1,point2,point3,point4);
+
+}
+
+
+
+</script>
+</body>
+</html>

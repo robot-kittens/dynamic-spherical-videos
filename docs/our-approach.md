@@ -8,7 +8,9 @@ To implement tracking within a 360 video there is a lot of research that has to 
  3. How can we support multiple vendors, e.g. Mobile but also Vive or Oculus?
     1. Unity supports Vive and Oculus, implementing the SDK's creates a unified approach to exporting for Stereoscopic content.
  4. How can we create tracking data that we can use within our toolkit?
+    1. 
  5. How can we track objects?
+    1. With After Effects and Mocha we can create our tracking data which can be translated toward c# or json to be used in external applications. These transforms are basic on solid shapes.
  6. How can we track an object in a deformed space?
  7. How can we transform 2D space to an Equirect space?
  8. 

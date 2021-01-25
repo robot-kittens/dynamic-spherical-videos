@@ -1,0 +1,106 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+	<title>jsmpeg Demo - Big Buck Bunny</title>
+	<style type="text/css">
+		html,body {
+			background-color: red;
+			color: #555;
+			font-family: helvetica, arial, sans-serif;
+			margin: 0;
+			padding: 0;
+			font-size: 12pt;
+		}
+		
+		#container {
+			position: absolute;
+			left: 0;
+			right: 0;
+			top: 30px;
+			margin: auto;
+			width: 640px;
+		}
+		a {
+			color: #777;
+			text-decoration: none;
+		}
+		a:hover {
+			color: #ccc;
+		}
+	</style>
+	
+</head>
+<body>
+  <div id="root"></div>
+	<div id="container">
+		<div style='position:absolute;left:0px;top:0px;'><canvas id="screenCanvas" width="640" height="360"></canvas></div>
+		<div style='position:absolute;left:0px;top:0px;'><canvas id="videoCanvas0" width="640" height="360"></canvas></div>
+		<div style='display:none;'><canvas id="videoCanvas" width="640" height="360"></canvas></div>
+		<div style='display:none;'><canvas id="videoCanvas2" width="640" height="360"></canvas></div>
+		<div><canvas id="downcanvas" width="640" height="360"></canvas></div>
+
+	</div>
+	<script type="text/javascript" src="jsmpg.js"></script>
+	<script type="text/javascript" src="track.js"></script>
+	<script type="text/javascript" src="DeformerObject.js"></script>
+	<script type="text/javascript" src="Deformer.js"></script>
+	<script type="text/javascript" src="numeric.js"></script>
+	<script type="text/javascript" src="temp.js"></script>
+	<script type="text/javascript">
+		var cf = 0;
+
+		function loadTrackingData(track) {
+			var trackingData = track;	
+			var o;
+			
+			for (var i in trackingData) {
+				for (var i2 in trackingData[i]) {
+					o = trackingData[i][i2];
+					//console.log(o);
+					//trace(i);
+					//trace(i2);
+					deformer.addFrame(i, i2, o[1], o[2], o[3], o[4]);
+				}	
+			}		
+		}
+
+		var deformer = new Deformer(640,360,downcanvas);
+		loadTrackingData(track);
+
+		var img = new Image();
+		img.src = 'foto.jpg';
+		img.onload = function() {
+			deformer.addObject("bus",img,"down");
+		};	
+
+		
+
+
+
+
+
+		function donextframe(frame) {
+			if (frame !=  1) {
+			//setTimeout(nextmask,500);
+				nextmask(frame);
+			}
+			//console.log(frame);
+			//setTimeout(nextmask,500);
+		}
+
+		function nextmask(frame) {
+			//deformer.updateFrame(frame);
+			player2.nextFrame();	
+		}
+		var canvas0 = document.getElementById('videoCanvas0');
+		var canvasContext = this.canvas0.getContext('2d');
+
+		var canvas = document.getElementById('videoCanvas');
+		var canvas2 = document.getElementById('videoCanvas2');
+		var player = new jsmpeg('out.mpg', {canvas:canvas, autoplay:true, loop: false,callback:donextframe});
+		var player2 = new jsmpeg('outmask.mpg', {canvas:canvas2, autoplay:false, loop: false,mask:player,maskedtarget:canvasContext});
+		console.log(track);
+	</script>
+</body>
+</html>
