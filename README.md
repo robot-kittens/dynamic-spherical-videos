@@ -23,4 +23,6 @@ For a quick overview of the current state and next steps we have the following c
  - [x] Implement debugging tools to allow for camera movements
  - [x] Realtime 360 video manipulation
  - [x] Track a regular video 
- - [ ] Apply lens deformations for 2D to Equirectangular
+ - [x] Apply lens deformations for 2D to Equirectangular
+ - [x] Test FFD as a tracking technique
+ - [ ] Transform a 3D video into a 2D video to be tracked then convert it back into 3D
