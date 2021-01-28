@@ -25,4 +25,5 @@ For a quick overview of the current state and next steps we have the following c
  - [x] Track a regular video 
  - [x] Apply lens deformations for 2D to Equirectangular
  - [x] Test FFD as a tracking technique
+ - [x] Translate a 2D space into a 3D space (Equirectangular)
  - [ ] Transform a 3D video into a 2D video to be tracked then convert it back into 3D
