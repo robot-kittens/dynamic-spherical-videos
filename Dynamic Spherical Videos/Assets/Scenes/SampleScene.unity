@@ -633,13 +633,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1344c3c82d62a2a41a3576d8abb8e3ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_Material: {fileID: 2100000, guid: 5e613ea6e1bd94274a9818fbbba27601, type: 2}
+  m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Texture: {fileID: 8400000, guid: 3c174ddd4e0bf4cfa8f5a291b1bda19d, type: 2}
+  m_Texture: {fileID: 8400000, guid: 5bc4ba1956cc2461e8613a12237144e0, type: 2}
   m_UVRect:
     serializedVersion: 2
     x: 0
@@ -1232,6 +1232,8 @@ GameObject:
   - component: {fileID: 1788783122}
   - component: {fileID: 1788783121}
   - component: {fileID: 1788783120}
+  - component: {fileID: 1788783124}
+  - component: {fileID: 1788783123}
   m_Layer: 8
   m_Name: Tracking Camera
   m_TagString: Untagged
@@ -1304,6 +1306,60 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1788783123
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1788783119}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 500df08c34c4f0d4aa4234068f9bf3f9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cubeMap: {fileID: 8400000, guid: 5bc4ba1956cc2461e8613a12237144e0, type: 2}
+  faceMask: 63
+--- !u!114 &1788783124
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1788783119}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: be76e5f14cfee674cb30b491fb72b09b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  boost: 3.5
+  positionLerpTime: 0.2
+  mouseSensitivityCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0.5
+      inSlope: 0
+      outSlope: 5
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 2.5
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  rotationLerpTime: 0.01
+  invertY: 0
 --- !u!1 &1920138494
 GameObject:
   m_ObjectHideFlags: 0
