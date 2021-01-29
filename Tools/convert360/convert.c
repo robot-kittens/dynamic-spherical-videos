@@ -44,16 +44,20 @@ typedef struct TransformContext {
     int max_cube_edge_length;
     int max_output_h;
     int max_output_w;
+    int input_layout;
     int output_layout;
     int input_stereo_format;
     int output_stereo_format;
     int vflip;
     int planes;
+    float input_expand_coef;
     float expand_coef;
     int is_horizontal_offset;
     float fixed_yaw;    ///< Yaw (asimuth) angle, degrees
     float fixed_pitch;  ///< Pitch (elevation) angle, degrees
     float fixed_roll;   ///< Roll (tilt) angle, degrees
+    float fixed_hfov;   ///< Horizontal field of view, degrees
+    float fixed_vfov;   ///< Vertical field of view, degrees
     float fixed_cube_offcenter_x; // offcenter projection x
     float fixed_cube_offcenter_y; // offcenter projection y
     float fixed_cube_offcenter_z; // offcenter projection z
@@ -95,10 +99,12 @@ static inline int generate_map(
     s->out_map_planes = 2;
 
     FrameTransformContext frame_transform_ctx = (FrameTransformContext) {
+      .input_layout = s->input_layout,
       .output_layout = s->output_layout,
       .input_stereo_format = s->input_stereo_format,
       .output_stereo_format = s->output_stereo_format,
       .vflip = s->vflip,
+      .input_expand_coef = s->input_expand_coef,
       .expand_coef = s->expand_coef,
       .interpolation_alg = s->interpolation_alg,
       .width_scale_factor = s->width_scale_factor,
@@ -106,6 +112,8 @@ static inline int generate_map(
       .fixed_yaw = s->fixed_yaw,
       .fixed_pitch = s->fixed_pitch,
       .fixed_roll = s->fixed_roll,
+      .fixed_hfov = s->fixed_hfov,
+      .fixed_vfov = s->fixed_vfov,
       .fixed_cube_offcenter_x = s->fixed_cube_offcenter_x,
       .fixed_cube_offcenter_y = s->fixed_cube_offcenter_y,
       .fixed_cube_offcenter_z = s->fixed_cube_offcenter_z,
@@ -374,24 +382,30 @@ static const AVOption transform360_options[] = {
     { "lr",      NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_LR },      0, 0, FLAGS, "stereo_format" },
     { "mono",    NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_MONO },    0, 0, FLAGS, "stereo_format" },
     { "guess",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = STEREO_FORMAT_GUESS },   0, 0, FLAGS, "stereo_format" },
+    { "input_layout", "Input video layout format",          OFFSET(input_layout),     AV_OPT_TYPE_INT,  {.i64 = LAYOUT_EQUIRECT },   0, LAYOUT_N - 1,  .flags = FLAGS, "layout" },
     { "output_layout", "Output video layout format",         OFFSET(output_layout),    AV_OPT_TYPE_INT,  {.i64 = LAYOUT_CUBEMAP_32 }, 0, LAYOUT_N - 1,  .flags = FLAGS, "layout" },
     { "CUBEMAP_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "layout" },
     { "CUBEMAP_23_OFFCENTER",NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_23_OFFCENTER },0, 0, FLAGS, "layout" },
     { "EQUIRECT",NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_EQUIRECT },0, 0, FLAGS, "layout" },
     { "BARREL",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_BARREL },  0, 0, FLAGS, "layout" },
     { "EAC_32",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_EAC_32 },  0, 0, FLAGS, "layout" },
+    { "FLAT_FIXED",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_FLAT_FIXED },          0, 0, FLAGS, "layout" },
     { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "layout" },
     { "cubemap_23_offcenter",NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_23_OFFCENTER },0, 0, FLAGS, "layout" },
     { "equirect",NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_EQUIRECT },0, 0, FLAGS, "layout" },
+    { "flat_fixed",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_FLAT_FIXED },          0, 0, FLAGS, "layout" },
     { "barrel",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_BARREL },  0, 0, FLAGS, "layout" },
     { "eac_32",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_EAC_32 },  0, 0, FLAGS, "layout" },
     { "vflip", "Output video 2nd eye vertical flip (true, false)",         OFFSET(vflip),    AV_OPT_TYPE_INT, {.i64 = 0 }, 0, 1,     .flags = FLAGS, "vflip" },
     { "false",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 0 }, 0, 0, FLAGS, "vflip" },
     { "true",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 1 }, 0, 0, FLAGS, "vflip" },
+    { "input_expand_coef", "Expansion coeffiecient of the input",         OFFSET(input_expand_coef),    AV_OPT_TYPE_FLOAT,  {.dbl=1.01f}, 0, 10,  .flags = FLAGS },
     { "expand_coef", "Expansion coeffiecient for each face in cubemap (default 1.01)",         OFFSET(expand_coef),    AV_OPT_TYPE_FLOAT,  {.dbl=1.01f}, 0, 10,  .flags = FLAGS },
     { "yaw", "View orientation for flat_fixed projection, degrees",   OFFSET(fixed_yaw),          AV_OPT_TYPE_FLOAT,   {.dbl =   0.0}, -360, 360,  .flags = FLAGS },
     { "pitch", "View orientation for flat_fixed projection, degrees", OFFSET(fixed_pitch),        AV_OPT_TYPE_FLOAT,   {.dbl =   0.0}, -180, 180,  .flags = FLAGS },
     { "roll", "View orientation for flat_fixed projection, degrees",  OFFSET(fixed_roll),         AV_OPT_TYPE_FLOAT,   {.dbl =   0.0}, -180, 180,  .flags = FLAGS },
+    { "hfov", "Horizontal field of view for flat_fixed projection, degrees (default 120)",  OFFSET(fixed_hfov), AV_OPT_TYPE_FLOAT,   {.dbl = 120.0}, -360, 360,  .flags = FLAGS },
+    { "vfov", "Vertical field of view for flat_fixed projection, degrees (default 110)",     OFFSET(fixed_vfov), AV_OPT_TYPE_FLOAT,   {.dbl = 110.0}, -180, 180,  .flags = FLAGS },
     { "cube_offcenter_x", "Offcenter cube displacement x",   OFFSET(fixed_cube_offcenter_x),          AV_OPT_TYPE_FLOAT,   {.dbl =   0.0}, -1, 1,  .flags = FLAGS },
     { "cube_offcenter_y", "Offcenter cube displacement y",   OFFSET(fixed_cube_offcenter_y),          AV_OPT_TYPE_FLOAT,   {.dbl =   0.0}, -1, 1,  .flags = FLAGS },
     { "cube_offcenter_z", "Offcenter cube displacement z",   OFFSET(fixed_cube_offcenter_z),          AV_OPT_TYPE_FLOAT,   {.dbl =   0.0}, -1, 1,  .flags = FLAGS },
