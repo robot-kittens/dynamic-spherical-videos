@@ -17,6 +17,7 @@
 using namespace cv;
 using namespace std;
 
+constexpr float kCubemapSideDistance = 0.5f;
 static const float kXHalf = 0.5;
 static const float kYHalf = 0.5;
 static double kEpsilon = 1e-9;
@@ -429,6 +430,12 @@ void VideoFrameTransform::calcualteFilteringConfig(
       calculateFov(ctx_.fixed_hfov, ctx_.fixed_vfov, hFov, vFov);
       break;
 #endif
+    case LAYOUT_FLAT_FIXED:
+      {
+        hFov = ctx_.fixed_hfov;
+        vFov = ctx_.fixed_vfov;
+        break;
+      }
     case LAYOUT_EQUIRECT:
       {
         hFov = 360.0;
@@ -533,12 +540,10 @@ bool VideoFrameTransform::generateMapForPlane(
 
     // Both scaling and low pass filtering processes are for antialiasing
     // purpose
-    int scaledOutputWidth = min(
-      (int) (ctx_.width_scale_factor * outputWidth + 0.5),
-      inputWidth);
-    int scaledOutputHeight = min(
-      (int) (ctx_.height_scale_factor * outputHeight + 0.5),
-      inputHeight);
+    int scaledOutputWidth =
+      (int) (ctx_.width_scale_factor * outputWidth + 0.5);
+    int scaledOutputHeight =
+      (int) (ctx_.height_scale_factor * outputHeight + 0.5);
 
     float inputPixelWidth = 1.0f / inputWidth;
     if (ctx_.input_stereo_format == STEREO_FORMAT_LR) {
@@ -810,6 +815,105 @@ bool VideoFrameTransform::transformPlane(
   return true;
 }
 
+void VideoFrameTransform::transformCubeFacePos(
+  float tx,
+  float ty,
+  float tz,
+  float *outX,
+  float *outY
+) {
+  float x, y;
+
+  if (tz <= -kCubemapSideDistance) {
+    x = tx / tz;
+    y = ty / tz;
+    if (x >= -1.0 && x <= 1.0 && y >= -1.0 && y <= 1.0) {
+      *outX = (5.0f + x / ctx_.input_expand_coef) / 6.0f;
+      *outY = (3.0f + y / ctx_.input_expand_coef) / 4.0f;
+      return;
+    }
+  }
+  if (tz >= kCubemapSideDistance) {
+    x = tx / tz;
+    y = ty / tz;
+    if (x >= -1.0 && x <= 1.0 && y >= -1.0 && y <= 1.0) {
+      *outX = (3.0f + x / ctx_.input_expand_coef) / 6.0f;
+      *outY = (3.0f - y / ctx_.input_expand_coef) / 4.0f;
+      return;
+    }
+  }
+  if (tx <= -kCubemapSideDistance) {
+    x = tz / tx;
+    y = ty / tx;
+    if (x >= -1.0 && x <= 1.0 && y >= -1.0 && y <= 1.0) {
+      *outX = (3.0f - x / ctx_.input_expand_coef) / 6.0f;
+      *outY = (1.0f + y / ctx_.input_expand_coef) / 4.0f;
+      return;
+    }
+  }
+  if (tx >= kCubemapSideDistance) {
+    x = tz / tx;
+    y = ty / tx;
+    if (x >= -1.0 && x <= 1.0 && y >= -1.0 && y <= 1.0) {
+      *outX = (1.0f - x / ctx_.input_expand_coef) / 6.0f;
+      *outY = (1.0f - y / ctx_.input_expand_coef) / 4.0f;
+      return;
+    }
+  }
+  if (ty <= -kCubemapSideDistance) {
+    x = tx / ty;
+    y = tz / ty;
+    if (x >= -1.0 && x <= 1.0 && y >= -1.0 && y <= 1.0) {
+      *outX = (1.0f - x / ctx_.input_expand_coef) / 6.0f;
+      *outY = (3.0f + y / ctx_.input_expand_coef) / 4.0f;
+      return;
+    }
+  }
+  if (ty >= kCubemapSideDistance) {
+    x = tx / ty;
+    y = tz / ty;
+    if (x >= -1.0 && x <= 1.0 && y >= -1.0 && y <= 1.0) {
+      *outX = (5.0f + x / ctx_.input_expand_coef) / 6.0f;
+      *outY = (1.0f + y / ctx_.input_expand_coef) / 4.0f;
+      return;
+    }
+  }
+  // Return outside coordinates.
+  *outX = -1.0f;
+  *outY = 0.0f;
+}
+
+void VideoFrameTransform::transformInputPos(
+    float tx,
+    float ty,
+    float tz,
+    float inputPixelWidth,
+    float* outX,
+    float* outY) {
+  switch (ctx_.input_layout) {
+    case LAYOUT_CUBEMAP_32:
+    {
+      float d = sqrtf(tx * tx + ty * ty + tz * tz);
+      transformCubeFacePos(tx / d, ty / d, tz / d, outX, outY);
+      break;
+    }
+    default:
+    {
+      // Assumming equirect
+      float d = sqrtf(tx * tx + ty * ty + tz * tz);
+
+      *outX = -atan2f (-tx / d, tz / d) / (M_PI * 2.0f) + 0.5f;
+      if (ctx_.output_layout == LAYOUT_BARREL) {
+        // Clamp pixels on the right, since we might have padding from ffmpeg.
+        *outX = std::min(*outX, 1.0f - inputPixelWidth * 0.5f);
+        *outX = std::max(*outX, inputPixelWidth * 0.5f);
+      }
+      *outY = asinf (-ty / d) / M_PI + 0.5f;
+      break;
+    }
+  }
+}
+
 bool VideoFrameTransform::transformPos(
     float x,
     float y,
@@ -855,7 +959,9 @@ bool VideoFrameTransform::transformPos(
     float qx, qy, qz, tx, ty, tz, d;
     float yaw, pitch;
     bool hasMapping = true;
-    y = 1.0f - y;
+    if (ctx_.output_layout != LAYOUT_FLAT_FIXED) {
+      y = 1.0f - y;
+    }
     array<float, 3> vx, vy, p;
     int face = 0, vFace, hFace;
 
@@ -882,6 +988,8 @@ bool VideoFrameTransform::transformPos(
       case LAYOUT_FB:
         break;
 #endif
+      case LAYOUT_FLAT_FIXED:
+        break;
       case LAYOUT_EQUIRECT:
         {
           yaw = (2.0f * x - 1.0f) * M_PI;
@@ -1029,15 +1137,7 @@ bool VideoFrameTransform::transformPos(
 
         ty = -ty;
 
-        d = sqrtf(tx * tx + ty * ty + tz * tz);
-
-        *outX = -atan2f (-tx / d, tz / d) / (M_PI * 2.0f) + 0.5f;
-        if (ctx_.output_layout == LAYOUT_BARREL) {
-          // Clamp pixels on the right, since we might have padding from ffmpeg.
-          *outX = std::min(*outX, 1.0f - inputPixelWidth * 0.5f);
-          *outX = std::max(*outX, inputPixelWidth * 0.5f);
-        }
-        *outY = asinf (-ty / d) / M_PI + 0.5f;
+        transformInputPos(tx, ty, tz, inputPixelWidth, outX, outY);
         break;
       }
  #ifdef FACEBOOK_LAYOUT
@@ -1055,6 +1155,13 @@ bool VideoFrameTransform::transformPos(
         break;
       }
 #endif
+      case LAYOUT_FLAT_FIXED:
+      {
+        *outX = ((x - 0.5f) * ctx_.fixed_hfov + ctx_.fixed_yaw) / 360.0f + 0.5f;
+        *outY = ((y - 0.5f) * ctx_.fixed_vfov - ctx_.fixed_pitch) / 180.0f + 0.5f;
+        normalize_equirectangular(*outX, *outY, outX, outY);
+        break;
+      }
       case LAYOUT_N:
         {
           printf(
