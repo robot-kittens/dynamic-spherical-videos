@@ -50,6 +50,7 @@ typedef struct TransformContext {
     int vflip;
     int planes;
     float expand_coef;
+    int is_horizontal_offset;
     float fixed_yaw;    ///< Yaw (asimuth) angle, degrees
     float fixed_pitch;  ///< Pitch (elevation) angle, degrees
     float fixed_roll;   ///< Roll (tilt) angle, degrees
@@ -64,7 +65,8 @@ typedef struct TransformContext {
     float height_scale_factor;
     int enable_low_pass_filter;
     float kernel_height_scale_factor;
-    int min_kernel_half_height;
+    float min_kernel_half_height;
+    float max_kernel_half_height;
     int enable_multi_threading;
     int num_vertical_segments;
     int num_horizontal_segments;
@@ -107,9 +109,11 @@ static inline int generate_map(
       .fixed_cube_offcenter_x = s->fixed_cube_offcenter_x,
       .fixed_cube_offcenter_y = s->fixed_cube_offcenter_y,
       .fixed_cube_offcenter_z = s->fixed_cube_offcenter_z,
+      .is_horizontal_offset = s->is_horizontal_offset,
       .enable_low_pass_filter = s->enable_low_pass_filter,
       .kernel_height_scale_factor = s->kernel_height_scale_factor,
       .min_kernel_half_height = s->min_kernel_half_height,
+      .max_kernel_half_height = s->max_kernel_half_height,
       .enable_multi_threading = s->enable_multi_threading,
       .num_vertical_segments = s->num_vertical_segments,
       .num_horizontal_segments = s->num_horizontal_segments,
@@ -355,6 +359,7 @@ static const AVOption transform360_options[] = {
     { "height",        "Output video height",         OFFSET(h_expr),    AV_OPT_TYPE_STRING,        .flags = FLAGS },
     { "size",          "set video size",              OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, FLAGS },
     { "s",             "set video size",              OFFSET(size_str), AV_OPT_TYPE_STRING, {.str = NULL}, 0, FLAGS },
+    { "is_horizontal_offset", "Whether to use offset on the horizontal plane only. It only affects yaw.", OFFSET(is_horizontal_offset), AV_OPT_TYPE_BOOL, {.i64 =   0},     0, 1,  .flags = FLAGS },
     { "cube_edge_length", "Length of a cube edge (for cubic transform, overrides w and h, default 0 for off)",         OFFSET(cube_edge_length),    AV_OPT_TYPE_INT,  {.i64 = 0}, 0, 16384,  .flags = FLAGS },
     { "max_cube_edge_length", "Max length of a cube edge (for cubic transform, overrides w, h, and cube_edge_length, default 0 for off)",   OFFSET(max_cube_edge_length),    AV_OPT_TYPE_INT,  {.i64 = 0}, 0, 16384,  .flags = FLAGS },
     { "max_output_h", "Max height of the output video (for pyramid/cone transform, overrides pyramid_height, default 0 for off)",         OFFSET(max_output_h),    AV_OPT_TYPE_INT,  {.i64 = 0}, 0, 16384,  .flags = FLAGS },
@@ -373,9 +378,13 @@ static const AVOption transform360_options[] = {
     { "CUBEMAP_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "layout" },
     { "CUBEMAP_23_OFFCENTER",NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_23_OFFCENTER },0, 0, FLAGS, "layout" },
     { "EQUIRECT",NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_EQUIRECT },0, 0, FLAGS, "layout" },
+    { "BARREL",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_BARREL },  0, 0, FLAGS, "layout" },
+    { "EAC_32",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_EAC_32 },  0, 0, FLAGS, "layout" },
     { "cubemap_32",          NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_32 },          0, 0, FLAGS, "layout" },
     { "cubemap_23_offcenter",NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_CUBEMAP_23_OFFCENTER },0, 0, FLAGS, "layout" },
     { "equirect",NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_EQUIRECT },0, 0, FLAGS, "layout" },
+    { "barrel",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_BARREL },  0, 0, FLAGS, "layout" },
+    { "eac_32",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = LAYOUT_EAC_32 },  0, 0, FLAGS, "layout" },
     { "vflip", "Output video 2nd eye vertical flip (true, false)",         OFFSET(vflip),    AV_OPT_TYPE_INT, {.i64 = 0 }, 0, 1,     .flags = FLAGS, "vflip" },
     { "false",  NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 0 }, 0, 0, FLAGS, "vflip" },
     { "true",   NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 1 }, 0, 0, FLAGS, "vflip" },
@@ -402,7 +411,8 @@ static const AVOption transform360_options[] = {
     { "num_vertical_segments" , "Number of vertical segments per frame plane", OFFSET(num_vertical_segments), AV_OPT_TYPE_INT, {.i64 = 5}, 2, 500, .flags = FLAGS, "num_vertical_segments" },
     { "num_horizontal_segments" , "Number of horizontal segments per frame plane", OFFSET(num_horizontal_segments), AV_OPT_TYPE_INT, {.i64 = 1}, 1, 500, .flags = FLAGS, "num_horizontal_segments" },
     { "kernel_height_scale_factor", "Factor to scale the calculated kernel height for low pass filtering", OFFSET(kernel_height_scale_factor), AV_OPT_TYPE_FLOAT, {.dbl = 1.0}, 0.1, 100.0, .flags = FLAGS, "kernel_height_scale_factor" },
-    { "min_kernel_half_height", "Half of the mininum kernel height", OFFSET(min_kernel_half_height), AV_OPT_TYPE_INT, {.i64 = 1}, 1, 200, .flags = FLAGS, "min_kernel_half_height" },
+    { "min_kernel_half_height", "Half of the mininum kernel height", OFFSET(min_kernel_half_height), AV_OPT_TYPE_FLOAT, {.dbl = 1.0}, 0.5, 200, .flags = FLAGS, "min_kernel_half_height" },
+    { "max_kernel_half_height", "The maximum value of the kernel height", OFFSET(max_kernel_half_height), AV_OPT_TYPE_FLOAT, {.dbl = 10000.0}, 0.5, 100000, .flags = FLAGS, "max_kernel_half_height" },
     { "adjust_kernel", "Enable adjustment of kernel", OFFSET(adjust_kernel), AV_OPT_TYPE_INT, {.i64 = 1}, 0, 1, .flags = FLAGS, "adjust_kernel" },
     { "kernel_adjust_factor", "Factor to further adjust the kernel size", OFFSET(kernel_adjust_factor), AV_OPT_TYPE_FLOAT, {.dbl = 1.0}, 0.1, 100.0, .flags = FLAGS, "kernel_adjust_factor" },
     { NULL }
