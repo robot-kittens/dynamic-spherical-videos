@@ -1,0 +1,2 @@
+/usr/bin/ar qc libConvert360.a  CMakeFiles/Convert360.dir/Library/VideoFrameTransform.cpp.o CMakeFiles/Convert360.dir/Library/VideoFrameTransformHandler.cpp.o
+/usr/bin/ranlib libConvert360.a

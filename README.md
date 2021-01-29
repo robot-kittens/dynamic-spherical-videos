@@ -27,4 +27,42 @@ For a quick overview of the current state and next steps we have the following c
  - [x] Test FFD as a tracking technique
  - [x] Translate a 2D space into a 3D space (Equirectangular)
  - [x] Transform a 360video to different formats e.g. Cubemap, Equirectangular, Cubemap (chopped)
- - [ ] Transform a 3D video into a 2D video to be tracked then convert it back into 3D
+ - [x] Transform a 3D video into a 2D video to be tracked then convert it back into 3D
+
+The project has finished up and a solution to track objects within a 360video was found.
+
+# Solution
+- Record a 360 video, formatting is free to choose. E.g. Equirect, Cubemap.
+- Export our 360 video to a Cubemap using a special FFMPEG build with convert plugin included or using a VR Converter.
+- Import the Cubemap video within Unity
+- Write the Cubemap to a RenderTexture
+- Use the Cubemap video as a RawImage within a Canvas in Unity.
+- Use After Effects and Mocha to create Tracking data
+- Export the tracking data to c#
+- Apply the tracking data on a tracking object within Unity
+- Render the canvas to a texture to be projected on the skybox
+
+# Examples
+## Convert to cubemap video: 
+    Tools/convert360
+Creates a plugin for FFMPEG to convert videos to Cubemap
+
+## Custom tooling for tracking: 
+    Tools/build-masking
+A deprecated tool to create tracking data, discontinued.
+
+## 2D Tracking on a WebGL Canvas: 
+    Tools/2d-tracking-test
+A demo showcasing advanced topics for tracking video:
+- Alphavideo (video with alpha)
+- Tracking data
+- Cornerpin manipulation
+- Personalized data
+
+## Freeform Deformation:
+    Tools/ffd-js
+Showcases FFD within Javascript
+
+## Convert json to C#
+    Tools/convert-json-to-csharp
+Converts tracked cornerpin data to c# objects.

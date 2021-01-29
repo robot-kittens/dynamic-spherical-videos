@@ -1,0 +1,4 @@
+/usr/local/lib/libConvert360.a
+/usr/local/include/Convert360/./Library/VideoFrameTransformHelper.h
+/usr/local/include/Convert360/./Library/VideoFrameTransformHandler.h
+/usr/local/include/Convert360/./Library/VideoFrameTransform.h
