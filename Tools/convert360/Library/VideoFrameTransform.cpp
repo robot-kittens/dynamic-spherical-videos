@@ -189,7 +189,15 @@ void VideoFrameTransform::filterSegment(
     Mat outputSegment(outputMat(segmentRect));
 
     // Filtering using two 1D kernels
-    sepFilter2D(inputSegment, outputSegment, -1, kernelX, kernelY);
+    sepFilter2D(
+      inputSegment,
+      outputSegment,
+      -1,
+      kernelX,
+      kernelY,
+      Point(-1,-1)  /* anchor */,
+      0  /* delta */,
+      BORDER_REPLICATE);
   } catch (const exception& ex) {
     printf(
       "Could not filter segment for the plane %d. Error: %s\n",
@@ -257,14 +265,33 @@ void VideoFrameTransform::generateKernelAndFilteringConfig(
         - 0.5 * inputWidth) / inputWidth;
       float avgPitch = 0.5 * M_PI * (inputHeight - top - bottom) / inputHeight;
 
+      float yaw = ctx_.fixed_yaw * M_PI / 180.0f;
+      float pitch = ctx_.fixed_pitch * M_PI / 180.0f;
+      float offset = std::abs(ctx_.fixed_cube_offcenter_z);
+
+      // Check if yaw and pitch are both 0 and we should use reverse direction
+      // of the offset instead.
+      if (std::abs(yaw) < kEpsilon && std::abs(pitch) < kEpsilon && (
+          std::abs(ctx_.fixed_cube_offcenter_x) > kEpsilon ||
+          std::abs(ctx_.fixed_cube_offcenter_y) > kEpsilon ||
+          ctx_.fixed_cube_offcenter_z > kEpsilon)) {  // check Z > 0 explicitly
+        offset = sqrtf(
+            ctx_.fixed_cube_offcenter_x * ctx_.fixed_cube_offcenter_x +
+            ctx_.fixed_cube_offcenter_y * ctx_.fixed_cube_offcenter_y +
+            ctx_.fixed_cube_offcenter_z * ctx_.fixed_cube_offcenter_z);
+        yaw = atan2f(
+            -ctx_.fixed_cube_offcenter_x / offset,
+            -ctx_.fixed_cube_offcenter_z / offset);
+        pitch = asinf(-ctx_.fixed_cube_offcenter_y / offset);
+      }
+
       double dist = angularDistance(
-        ctx_.fixed_yaw,
-        ctx_.fixed_pitch,
+        yaw,
+        pitch,
         avgYaw,
         avgPitch);
 
-      double effectiveRatio =
-        getEffectiveRatio(dist, std::abs(ctx_.fixed_cube_offcenter_z));
+      double effectiveRatio = getEffectiveRatio(dist, offset);
       double kernelScalingFactor =
         ctx_.kernel_adjust_factor * baseEffectiveRatio / effectiveRatio;
       Mat adjustedKernelX = calculateKernel(kernelScalingFactor * sigmaX);
@@ -408,6 +435,18 @@ void VideoFrameTransform::calcualteFilteringConfig(
         vFov = 180.0;
         break;
       }
+    case LAYOUT_BARREL:
+      {
+        hFov = 450.0;
+        vFov = 90.0;
+        break;
+      }
+    case LAYOUT_EAC_32:
+      {
+        hFov = 270.0;
+        vFov = 180.0;
+        break;
+      }
     case LAYOUT_N:
       {
         printf(
@@ -416,12 +455,13 @@ void VideoFrameTransform::calcualteFilteringConfig(
       }
   }
 
-  float sigmaY = 0.5 * max(
-      ctx_.min_kernel_half_height,
-      int (
+  float sigmaY = 0.5f * std::min(
+      ctx_.max_kernel_half_height,
+      std::max(
+        ctx_.min_kernel_half_height,
         ctx_.kernel_height_scale_factor *
-        min(inputWidth / 360.0, inputHeight / 180.0) /
-        max(outputWidth / hFov, outputHeight / vFov)));
+          std::min(inputWidth / 360.0f, inputHeight / 180.0f) /
+            std::max(outputWidth / hFov, outputHeight / vFov)));
 
   // Build a basic 1D filter along Y direction
   Mat kernelY = calculateKernel(sigmaY);
@@ -481,21 +521,29 @@ bool VideoFrameTransform::generateMapForPlane(
     assert(
       inputWidth > 0 && inputHeight > 0 &&
       outputWidth > 0 && outputHeight > 0 &&
-      ctx_.width_scale_factor > 0
-      && ctx_.height_scale_factor > 0 &&
+      ctx_.width_scale_factor > 0 &&
+      ctx_.height_scale_factor > 0 &&
       ctx_.kernel_height_scale_factor > 0 &&
       ctx_.num_vertical_segments >= 2 &&
       ctx_.num_vertical_segments <= inputHeight &&
       ctx_.num_horizontal_segments >= 1 &&
       ctx_.num_horizontal_segments <= inputWidth &&
-      ctx_.min_kernel_half_height >= 1);
+      ctx_.min_kernel_half_height >= 0.5 &&
+      ctx_.max_kernel_half_height >= 0.5);
 
     // Both scaling and low pass filtering processes are for antialiasing
     // purpose
-    int scaledOutputWidth = ctx_.enable_low_pass_filter ? outputWidth :
-      min(ctx_.width_scale_factor * outputWidth + 0.5, 1.0 * inputWidth);
-    int scaledOutputHeight = ctx_.enable_low_pass_filter ? outputHeight :
-      min(ctx_.height_scale_factor * outputHeight + 0.5, 1.0 * inputHeight);
+    int scaledOutputWidth = min(
+      (int) (ctx_.width_scale_factor * outputWidth + 0.5),
+      inputWidth);
+    int scaledOutputHeight = min(
+      (int) (ctx_.height_scale_factor * outputHeight + 0.5),
+      inputHeight);
+
+    float inputPixelWidth = 1.0f / inputWidth;
+    if (ctx_.input_stereo_format == STEREO_FORMAT_LR) {
+      inputPixelWidth *= 2;
+    }
 
     Mat warpMat = Mat(scaledOutputHeight, scaledOutputWidth, CV_32FC2);
     for (int i = 0; i < scaledOutputHeight; ++i) {
@@ -503,7 +551,11 @@ bool VideoFrameTransform::generateMapForPlane(
         float outX, outY;
         float y = (i + 0.5f) / scaledOutputHeight;
         float x = (j + 0.5f) / scaledOutputWidth;
-        if (transformPos(x, y, &outX, &outY, transformMatPlaneIndex)) {
+        if (transformPos(
+            x, y, &outX, &outY, transformMatPlaneIndex, inputPixelWidth)) {
+          // OpenCV uses coordinates system. Where (0, 0) is the center of
+          // top-left pixel instead of a corner. In this case we have to
+          // shift output (x, y) by (-0.5f, -0.5f) to account for this.
           warpMat.at<Point2f>(i, j) =
             Point2f(outX * inputWidth - 0.5f, outY * inputHeight - 0.5f);
         } else {
@@ -522,8 +574,8 @@ bool VideoFrameTransform::generateMapForPlane(
       calcualteFilteringConfig(
         inputWidth,
         inputHeight,
-        outputWidth,
-        outputHeight,
+        scaledOutputWidth,
+        scaledOutputHeight,
         transformMatPlaneIndex);
     }
 
@@ -676,7 +728,11 @@ bool VideoFrameTransform::transformPlane(
   int outputHeight,
   int transformMatPlaneIndex,
   int imagePlaneIndex) {
-  Mat scaledWarpedImage;
+  // For Barrel layout we want to have some black spots on the video frame,
+  // so we need to change border mode to transparent, to avoid overwriting them.
+  int borderMode = (ctx_.output_layout == LAYOUT_BARREL) ?
+      BORDER_TRANSPARENT :
+      BORDER_WRAP;
   try {
     switch (ctx_.interpolation_alg) {
       case NEAREST:
@@ -695,30 +751,43 @@ bool VideoFrameTransform::transformPlane(
             tempMat = inputMat;
           }
 
-          bool needResize = !ctx_.enable_low_pass_filter &&
-            (tempMat.cols != outputWidth ||
-            tempMat.rows != outputHeight);
+          bool needResize =
+            (outputHeight != warpMats_[transformMatPlaneIndex].rows ||
+            outputWidth != warpMats_[transformMatPlaneIndex].cols);
 
           if (!needResize) {
+            // We want to set default YUV values to 0.
+            // UV (plane index > 0) planes are scaled from [-1, 1],
+            // so we set it to 128.
+            if (transformMatPlaneIndex && ctx_.output_layout == LAYOUT_BARREL) {
+              outputMat.setTo(Scalar(128));
+            }
             remap(
               tempMat,
               outputMat,
               warpMats_[transformMatPlaneIndex],
               cv::Mat(),
               ctx_.interpolation_alg,
-              BORDER_WRAP);
+              borderMode);
           } else {
+            // We want to set default YUV values to 0.
+            // UV (plane index > 0) planes are scaled from [-1, 1],
+            // so we set it to 128.
+            Mat scaledWarpedImage(
+              warpMats_[transformMatPlaneIndex].size(),
+              tempMat.type(),
+              Scalar(transformMatPlaneIndex ? 128 : 0));
             remap(
               tempMat,
               scaledWarpedImage,
               warpMats_[transformMatPlaneIndex],
               cv::Mat(),
               ctx_.interpolation_alg,
-              BORDER_WRAP);
+              borderMode);
             resize(
               scaledWarpedImage,
               outputMat,
-              outputMat.size(),
+              Size(outputWidth, outputHeight),
               0,
               0,
               INTER_AREA);
@@ -742,11 +811,12 @@ bool VideoFrameTransform::transformPlane(
 }
 
 bool VideoFrameTransform::transformPos(
-  float x,
-  float y,
-  float* outX,
-  float* outY,
-  int transformMatPlaneIndex) {
+    float x,
+    float y,
+    float* outX,
+    float* outY,
+    int transformMatPlaneIndex,
+    float inputPixelWidth) {
   try {
     int isRight = 0;
 
@@ -783,6 +853,8 @@ bool VideoFrameTransform::transformPos(
     }
 
     float qx, qy, qz, tx, ty, tz, d;
+    float yaw, pitch;
+    bool hasMapping = true;
     y = 1.0f - y;
     array<float, 3> vx, vy, p;
     int face = 0, vFace, hFace;
@@ -811,7 +883,36 @@ bool VideoFrameTransform::transformPos(
         break;
 #endif
       case LAYOUT_EQUIRECT:
-        break;
+        {
+          yaw = (2.0f * x - 1.0f) * M_PI;
+          pitch = (y - 0.5f) * M_PI;
+          break;
+        }
+      case LAYOUT_BARREL:
+        {
+          if (x <= 0.8f) {
+            yaw = (2.5f * x - 1.0f) * ctx_.expand_coef * M_PI;
+            pitch = (y * 0.5f  - 0.25f) * ctx_.expand_coef * M_PI;
+            face = -1;
+          } else {
+            vFace = (int) (y * 2);
+            face = (vFace == 1) ? TOP : BOTTOM;
+            x = x * 5.0f - 4.0f;
+            y = y * 2.0f - vFace;
+          }
+          break;
+        }
+      case LAYOUT_EAC_32:
+        {
+          vFace = (int) (y * 2);
+          hFace = (int) (x * 3);
+          x = x * 3.0f - hFace;
+          y = y * 2.0f - vFace;
+          x = tan((x - 0.5f) * M_PI * 0.5f) * 0.5f + 0.5f;
+          y = tan((y - 0.5f) * M_PI * 0.5f) * 0.5f + 0.5f;
+          face = hFace + (1 - vFace) * 3;
+          break;
+        }
       case LAYOUT_N:
         {
           printf(
@@ -824,12 +925,15 @@ bool VideoFrameTransform::transformPos(
       case LAYOUT_CUBEMAP_32:
       case LAYOUT_CUBEMAP_23_OFFCENTER:
       case LAYOUT_EQUIRECT:
+      case LAYOUT_BARREL:
+      case LAYOUT_EAC_32:
       {
-        if (ctx_.output_layout == LAYOUT_EQUIRECT) {
-          float sin_yaw = sin((2.0f * x - 1.0f) * M_PI);
-          float sin_pitch = sin((y - 0.5f) * M_PI);
-          float cos_yaw = cos((2.0f * x - 1.0f) * M_PI);
-          float cos_pitch = cos((y - 0.5f) * M_PI);
+        if (ctx_.output_layout == LAYOUT_EQUIRECT ||
+            (ctx_.output_layout == LAYOUT_BARREL && face < 0)) {
+          float sin_yaw = sin(yaw);
+          float sin_pitch = sin(pitch);
+          float cos_yaw = cos(yaw);
+          float cos_pitch = cos(pitch);
           qx = sin_yaw * cos_pitch;
           qy = sin_pitch;
           qz = cos_yaw * cos_pitch;
@@ -837,6 +941,14 @@ bool VideoFrameTransform::transformPos(
           assert(x >= 0 && x <= 1);
           assert(y >= 0 && y <= 1);
           assert(face >= 0 && face < 6);
+          if (ctx_.output_layout == LAYOUT_BARREL) {
+            float radius = (x - 0.5f) * (x - 0.5f) + (y - 0.5f) * (y - 0.5f);
+            if (radius > 0.25f * ctx_.expand_coef * ctx_.expand_coef) {
+              hasMapping = false;
+              break;
+            }
+          }
+
           x = (x - 0.5f) * ctx_.expand_coef + 0.5f;
           y = (y - 0.5f) * ctx_.expand_coef + 0.5f;
 
@@ -874,13 +986,27 @@ bool VideoFrameTransform::transformPos(
           qx = qx / d;
           qy = qy / d;
           qz = qz / d;
-          dist = intersectSphereOffset(
-            qx, qy, qz, ctx_.fixed_cube_offcenter_x,
-            ctx_.fixed_cube_offcenter_y, ctx_.fixed_cube_offcenter_z);
-          if (dist > 0.0f) {
-            qx = qx * dist - ctx_.fixed_cube_offcenter_x;
-            qy = qy * dist - ctx_.fixed_cube_offcenter_y;
-            qz = qz * dist - ctx_.fixed_cube_offcenter_z;
+          if (ctx_.is_horizontal_offset) {
+            d = sqrtf(qx * qx + qz * qz);
+            qx = qx / d;
+            qy = qy / d;
+            qz = qz / d;
+            dist = intersectSphereOffset(
+              qx, 0, qz,
+              ctx_.fixed_cube_offcenter_x, 0, ctx_.fixed_cube_offcenter_z);
+            if (dist > 0.0f) {
+              qx = qx * dist - ctx_.fixed_cube_offcenter_x;
+              qz = qz * dist - ctx_.fixed_cube_offcenter_z;
+            }
+          } else {
+            dist = intersectSphereOffset(
+              qx, qy, qz, ctx_.fixed_cube_offcenter_x,
+              ctx_.fixed_cube_offcenter_y, ctx_.fixed_cube_offcenter_z);
+            if (dist > 0.0f) {
+              qx = qx * dist - ctx_.fixed_cube_offcenter_x;
+              qy = qy * dist - ctx_.fixed_cube_offcenter_y;
+              qz = qz * dist - ctx_.fixed_cube_offcenter_z;
+            }
           }
         }
 
@@ -906,6 +1032,11 @@ bool VideoFrameTransform::transformPos(
         d = sqrtf(tx * tx + ty * ty + tz * tz);
 
         *outX = -atan2f (-tx / d, tz / d) / (M_PI * 2.0f) + 0.5f;
+        if (ctx_.output_layout == LAYOUT_BARREL) {
+          // Clamp pixels on the right, since we might have padding from ffmpeg.
+          *outX = std::min(*outX, 1.0f - inputPixelWidth * 0.5f);
+          *outX = std::max(*outX, inputPixelWidth * 0.5f);
+        }
         *outY = asinf (-ty / d) / M_PI + 0.5f;
         break;
       }
@@ -932,33 +1063,38 @@ bool VideoFrameTransform::transformPos(
         }
     }
 
-    switch (ctx_.input_stereo_format) {
-      case STEREO_FORMAT_TB:
-        {
-          if (isRight) {
-            *outY = *outY * kYHalf + kYHalf;
-          } else {
-            *outY = *outY * kYHalf;
-        }
-        break;
-      }
-      case STEREO_FORMAT_LR:
-        {
-          if (isRight) {
-            *outX = *outX * kXHalf + kXHalf;
-          } else {
-            *outX = *outX * kXHalf;
+    if (hasMapping) {
+      switch (ctx_.input_stereo_format) {
+        case STEREO_FORMAT_TB:
+          {
+            if (isRight) {
+              *outY = *outY * kYHalf + kYHalf;
+            } else {
+              *outY = *outY * kYHalf;
           }
           break;
         }
-      case STEREO_FORMAT_MONO:
-      case STEREO_FORMAT_GUESS:
-      case STEREO_FORMAT_N:
-        break;
-    }
+        case STEREO_FORMAT_LR:
+          {
+            if (isRight) {
+              *outX = *outX * kXHalf + kXHalf;
+            } else {
+              *outX = *outX * kXHalf;
+            }
+            break;
+          }
+        case STEREO_FORMAT_MONO:
+        case STEREO_FORMAT_GUESS:
+        case STEREO_FORMAT_N:
+          break;
+      }
 
-    assert(*outX >= 0 && *outX <= 1);
-    assert(*outY >= 0 && *outY <= 1);
+      assert(*outX >= 0 && *outX <= 1);
+      assert(*outY >= 0 && *outY <= 1);
+    } else {
+      *outX = -1;
+      *outY = 0;
+    }
     return true;
   } catch (const exception& ex) {
     printf(

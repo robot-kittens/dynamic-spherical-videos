@@ -18,6 +18,8 @@ typedef enum Layout {
   LAYOUT_FB,
 #endif
   LAYOUT_EQUIRECT,
+  LAYOUT_BARREL,
+  LAYOUT_EAC_32,
   LAYOUT_N
 } Layout;
 
@@ -53,13 +55,14 @@ typedef struct FrameTransformContext {
   float fixed_cube_offcenter_x; /// offcenter projection x
   float fixed_cube_offcenter_y; /// offcenter projection y
   float fixed_cube_offcenter_z; /// offcenter projection z
+  int is_horizontal_offset;  /// Whether horizontal plane offset is enabled
   int enable_low_pass_filter;
   float kernel_height_scale_factor; /// Factor to scale the calculated kernel
                                     /// height for low pass filtering
-  int min_kernel_half_height; /// Half of the mininum kernel height which is
+  float min_kernel_half_height; /// Half of the mininum kernel height which is
                               /// usually applied to areas with small pitch
                               /// values
-
+  float max_kernel_half_height; /// Maximum value of the kernel height
   int enable_multi_threading; /// Use multi-threading to filter segments
                               /// in parallel
   int num_vertical_segments; /// Number of vertical segments in a plane
