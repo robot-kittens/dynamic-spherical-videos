@@ -11,6 +11,9 @@ Our main prototyping playground. To get started simply add the project within th
     /Docs
 Holds documentation around decisions within the project.
 
+    /Tools
+Holds various tools for creating 360 video content.
+
 
 # Current status 
 For a quick overview of the current state and next steps we have the following checklist;
