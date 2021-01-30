@@ -6,4 +6,9 @@ To implement tracking within a 360 video there is a lot of research that has to 
  2. How can we real-time manipulate this video?
     1. By creating a (2D) canvas which we project onto the skybox. We can have the 360 video as a layer and add elements on top of it. For example images or text.
  3. How can we support multiple vendors, e.g. Mobile but also Vive or Oculus?
- 4. How can we track an object in a deformed space?
+    1. Unity supports Vive and Oculus, implementing the SDK's creates a unified approach to exporting for Stereoscopic content.
+ 4. How can we create tracking data that we can use within our toolkit?
+ 5. How can we track objects?
+ 6. How can we track an object in a deformed space?
+ 7. How can we transform 2D space to an Equirect space?
+ 8. 
